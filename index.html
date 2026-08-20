@@ -43,6 +43,18 @@
   .section-title{font-family:var(--font-display);font-size:16px;text-transform:uppercase;letter-spacing:.06em;margin:30px 0 12px;color:var(--red-dark);display:flex;align-items:center;gap:8px;}
   .section-title .n{font-family:var(--font-mono);font-size:12px;color:var(--muted);}
   .panel{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;color:var(--ink-on-card);}
+  .authbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:18px;font-family:var(--font-mono);font-size:12px;}
+  .authbar .iconbtn{color:var(--muted-on-bg);}
+  .authbar #loginErr{color:var(--red-dark);}
+  .authbar input{font-family:var(--font-body);font-size:13px;padding:6px 8px;border:1px solid var(--line-on-card);border-radius:4px;background:var(--card);color:var(--ink-on-card);}
+  .comments{margin-top:10px;padding-top:8px;border-top:1px dashed var(--line-on-card);}
+  .comments-list{display:flex;flex-direction:column;gap:6px;margin-bottom:8px;}
+  .comment-item{font-size:12px;color:var(--ink-on-card);}
+  .comment-author{font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted-on-card);}
+  .comment-ts{font-family:var(--font-mono);font-size:11px;color:var(--muted-on-card);}
+  .comment-text{margin:2px 0 0;}
+  .comment-form{display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap;}
+  .comment-form textarea{flex:1;min-width:140px;font-family:var(--font-body);font-size:13px;padding:6px 8px;border:1px solid var(--line-on-card);border-radius:4px;}
   .grid-form{display:grid;grid-template-columns:90px 140px 1fr;gap:10px;margin-bottom:10px;}
   .grid-form .full{grid-column:1/-1;}
   label.f{display:block;font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted-on-card);margin-bottom:4px;}
@@ -95,6 +107,8 @@
   <h1>Bitácora de rutas</h1>
   <div class="rule"></div>
 
+  <div id="authBar" class="authbar"></div>
+
   <div class="datebar">
     <label for="routeDate">Fecha de ruta</label>
     <input type="date" id="routeDate">
@@ -103,8 +117,8 @@
   </div>
   <div id="storageBanner" style="display:none;font-family:var(--font-mono);font-size:12px;color:var(--red-oncard);background:#F3E2D8;border:1px solid var(--red);border-radius:6px;padding:8px 12px;margin-bottom:18px;"></div>
 
-  <div class="section-title">Agregar jaula <span class="n">manual</span></div>
-  <div class="panel">
+  <div class="section-title" id="addSectionTitle" style="display:none;">Agregar jaula <span class="n">manual</span></div>
+  <div class="panel" id="addPanel" style="display:none;">
     <div class="grid-form">
       <div><label class="f">Jaula</label><input type="text" id="fParada" placeholder="1"></div>
       <div><label class="f">Código</label><input type="text" id="fCodigo" placeholder="OZA1326" style="font-family:var(--font-mono);text-transform:uppercase;"></div>
@@ -153,6 +167,9 @@ import {
   getFirestore, collection, addDoc, doc, updateDoc, getDocs,
   query, where, onSnapshot, arrayUnion
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+import {
+  getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCjs2YovORwSTp8eKcFmYg_b6IAXJSwVas",
@@ -165,7 +182,79 @@ const firebaseConfig = {
 };
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+const auth = getAuth(app);
 const jaulasCol = collection(db, 'jaulas');
+
+// ---- Usuarios y roles (correos de prueba, luego se cambian por los reales) ----
+const ENCARGADOS = {
+  'josimar@bitacora-kassel.com': 'Josimar Mares',
+  'cuauhtemoc@bitacora-kassel.com': 'Cuauhtémoc García'
+};
+const COMENTARISTAS = {
+  'citlali@bitacora-kassel.com': 'Citlali',
+  'ulises@bitacora-kassel.com': 'Ulises',
+  'yareli@bitacora-kassel.com': 'Yareli',
+  'nicole@bitacora-kassel.com': 'Nicole'
+};
+let currentUser = null; // {email, name, role: 'encargado' | 'comentarista' | 'publico'}
+function isEncargado(){ return !!currentUser && currentUser.role === 'encargado'; }
+function canComment(){ return !!currentUser && (currentUser.role === 'encargado' || currentUser.role === 'comentarista'); }
+
+const authBar = document.getElementById('authBar');
+function renderAuthBar(){
+  if(currentUser){
+    authBar.innerHTML =
+      '<span class="hint">Sesión: <strong>'+escapeHtml(currentUser.name)+'</strong>'+
+      (currentUser.role==='encargado' ? ' · encargado' : currentUser.role==='comentarista' ? ' · puede comentar' : ' · solo vista')+
+      '</span><button class="iconbtn" id="logoutBtn" type="button">Cerrar sesión</button>';
+    document.getElementById('logoutBtn').addEventListener('click', ()=> signOut(auth));
+  } else {
+    authBar.innerHTML =
+      '<form id="loginForm" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">'+
+        '<input type="email" id="loginEmail" placeholder="correo" autocomplete="username">'+
+        '<input type="password" id="loginPass" placeholder="contraseña" autocomplete="current-password">'+
+        '<button class="btn secondary small" type="submit">Iniciar sesión</button>'+
+        '<span class="hint" id="loginErr" style="display:none;"></span>'+
+      '</form>';
+    document.getElementById('loginForm').addEventListener('submit', async (ev)=>{
+      ev.preventDefault();
+      const email = document.getElementById('loginEmail').value.trim();
+      const pass = document.getElementById('loginPass').value;
+      const errEl = document.getElementById('loginErr');
+      errEl.style.display = 'none';
+      try{
+        await signInWithEmailAndPassword(auth, email, pass);
+      }catch(e){
+        errEl.textContent = 'Correo o contraseña incorrectos.';
+        errEl.style.display = 'inline';
+      }
+    });
+  }
+}
+
+function updateFormVisibility(){
+  const show = isEncargado() ? '' : 'none';
+  document.getElementById('addPanel').style.display = show;
+  document.getElementById('addSectionTitle').style.display = show;
+}
+
+onAuthStateChanged(auth, (user)=>{
+  if(user && user.email){
+    const email = user.email.toLowerCase();
+    if(ENCARGADOS[email]){
+      currentUser = {email, name: ENCARGADOS[email], role: 'encargado'};
+    } else if(COMENTARISTAS[email]){
+      currentUser = {email, name: COMENTARISTAS[email], role: 'comentarista'};
+    } else {
+      currentUser = {email, name: user.email, role: 'publico'};
+    }
+  } else {
+    currentUser = null;
+  }
+  renderAuthBar();
+  updateFormVisibility();
+  subscribeDate(dateInput.value);
+});
 
 function todayStr(){
   const d = new Date();
@@ -243,14 +332,18 @@ function renderTicketView(div, en, date){
       (en.nota ? '<p class="nota">'+escapeHtml(en.nota)+'</p>' : '')+
       '<div class="meta">agregado '+ fmtTs(en.ts) +(lastEdit ? ' · editado '+fmtTs(lastEdit.ts) : '')+'</div>'+
       (history.length ? '<button class="hist-toggle" data-action="hist">ver historial ('+history.length+')</button><div class="hist-list" style="display:none;"></div>' : '')+
+      '<div class="comments" data-comments></div>'+
     '</div>'+
     '<div class="actions">'+
-      '<button class="iconbtn" data-action="edit">Editar</button>'+
+      (isEncargado() ? '<button class="iconbtn" data-action="edit">Editar</button>' : '')+
     '</div>';
 
-  div.querySelector('[data-action="edit"]').addEventListener('click', ()=>{
-    renderTicketEdit(div, en, date);
-  });
+  const editBtn = div.querySelector('[data-action="edit"]');
+  if(editBtn){
+    editBtn.addEventListener('click', ()=>{
+      renderTicketEdit(div, en, date);
+    });
+  }
   const histBtn = div.querySelector('[data-action="hist"]');
   if(histBtn){
     histBtn.addEventListener('click', ()=>{
@@ -267,6 +360,68 @@ function renderTicketView(div, en, date){
         histBtn.textContent = 'ver historial ('+history.length+')';
       }
     });
+  }
+  renderComments(div, en);
+}
+
+async function loadComments(jaulaId){
+  const snap = await getDocs(collection(db, 'jaulas', jaulaId, 'comentarios'));
+  const arr = [];
+  snap.forEach(d=> arr.push({id: d.id, ...d.data()}));
+  arr.sort((a,b)=> (a.ts||0) - (b.ts||0));
+  return arr;
+}
+
+async function renderComments(div, en){
+  const box = div.querySelector('[data-comments]');
+  if(!box) return;
+  let comments = [];
+  try{
+    comments = await loadComments(en.id);
+  }catch(e){
+    console.error(e);
+  }
+  box.innerHTML = '';
+  if(comments.length){
+    const list = document.createElement('div');
+    list.className = 'comments-list';
+    comments.forEach(c=>{
+      const p = document.createElement('div');
+      p.className = 'comment-item';
+      p.innerHTML =
+        '<span class="comment-author">'+escapeHtml(c.autor||'')+'</span> · '+
+        '<span class="comment-ts">'+fmtTs(c.ts)+'</span>'+
+        '<p class="comment-text">'+escapeHtml(c.texto||'')+'</p>';
+      list.appendChild(p);
+    });
+    box.appendChild(list);
+  }
+  if(canComment()){
+    const form = document.createElement('div');
+    form.className = 'comment-form';
+    form.innerHTML =
+      '<textarea placeholder="Escribe un comentario..." class="c-text"></textarea>'+
+      '<button class="btn secondary small" type="button">Comentar</button>';
+    const btn = form.querySelector('button');
+    btn.addEventListener('click', async ()=>{
+      const textEl = form.querySelector('.c-text');
+      const text = textEl.value.trim();
+      if(!text) return;
+      btn.disabled = true;
+      btn.textContent = 'Enviando...';
+      try{
+        await addDoc(collection(db, 'jaulas', en.id, 'comentarios'), {
+          texto: text, autor: currentUser.name, autorEmail: currentUser.email, ts: Date.now()
+        });
+        textEl.value = '';
+        await renderComments(div, en);
+      }catch(e){
+        console.error(e);
+        btn.disabled = false;
+        btn.textContent = 'Comentar';
+      }
+    });
+    box.appendChild(form);
   }
 }
 
@@ -290,6 +445,7 @@ function renderTicketEdit(div, en, date){
     renderTicketView(div, en, date);
   });
   div.querySelector('[data-action="save"]').addEventListener('click', async ()=>{
+    if(!isEncargado()) return;
     const parada = div.querySelector('.e-parada').value.trim();
     const codigo = div.querySelector('.e-codigo').value.trim().toUpperCase();
     const tipo = div.querySelector('.e-tipo').value.trim();
@@ -331,6 +487,7 @@ document.getElementById('todayBtn').addEventListener('click', ()=>{
 });
 
 document.getElementById('addBtn').addEventListener('click', async ()=>{
+  if(!isEncargado()) return;
   const parada = document.getElementById('fParada').value.trim();
   const codigo = document.getElementById('fCodigo').value.trim().toUpperCase();
   const tipo = document.getElementById('fTipo').value.trim();
@@ -409,8 +566,7 @@ document.getElementById('searchBtn').addEventListener('click', async ()=>{
     resultsDiv.innerHTML = '<div class="empty">No se pudo buscar. Intenta de nuevo.</div>';
   }
 });
-
-subscribeDate(dateInput.value);
+// La primera carga ocurre sola cuando Firebase resuelve la sesión (onAuthStateChanged arriba).
 </script>
 </body>
 </html>
