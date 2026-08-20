@@ -147,7 +147,26 @@
 
 </div>
 
-<script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+import {
+  getFirestore, collection, addDoc, doc, updateDoc, getDocs,
+  query, where, onSnapshot, arrayUnion
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCjs2YovORwSTp8eKcFmYg_b6IAXJSwVas",
+  authDomain: "bitaora-quatro.firebaseapp.com",
+  projectId: "bitaora-quatro",
+  storageBucket: "bitaora-quatro.firebasestorage.app",
+  messagingSenderId: "203422294093",
+  appId: "1:203422294093:web:43a1de853e436666cc3c04",
+  measurementId: "G-CDSYGLNXL9"
+};
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const jaulasCol = collection(db, 'jaulas');
+
 function todayStr(){
   const d = new Date();
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
@@ -157,7 +176,6 @@ function fmtDateLabel(iso){
   const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
   return d + ' ' + meses[parseInt(m,10)-1] + ' ' + y;
 }
-function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 
 const dateInput = document.getElementById('routeDate');
 const dateHint = document.getElementById('dateHint');
@@ -165,89 +183,40 @@ const entriesList = document.getElementById('entriesList');
 const countLabel = document.getElementById('countLabel');
 dateInput.value = todayStr();
 
-async function keyFor(date){ return 'ruta:' + date; }
-
-let storageAvailable = true;
-const memStore = {};
-
-function showStorageBanner(){
+function showBanner(text){
   const el = document.getElementById('storageBanner');
   el.style.display = 'block';
-  el.textContent = 'Aviso: el guardado compartido no está disponible en esta vista, así que los cambios solo se conservan mientras esta ventana esté abierta. Para que se guarden y todo el equipo los vea, abre este archivo dentro de Claude (como artefacto) y no como archivo descargado o vista externa.';
+  el.textContent = text;
 }
-
-async function storageGet(key, shared){
-  if(!storageAvailable){
-    return memStore[key] ? {key, value: memStore[key], shared} : null;
-  }
-  try{
-    if(!window.storage) throw new Error('no storage');
-    return await window.storage.get(key, shared);
-  }catch(e){
-    storageAvailable = false;
-    showStorageBanner();
-    return memStore[key] ? {key, value: memStore[key], shared} : null;
-  }
-}
-async function storageSet(key, value, shared){
-  if(!storageAvailable){
-    memStore[key] = value;
-    return {key, value, shared};
-  }
-  try{
-    if(!window.storage) throw new Error('no storage');
-    const res = await window.storage.set(key, value, shared);
-    if(!res) throw new Error('empty result');
-    return res;
-  }catch(e){
-    storageAvailable = false;
-    showStorageBanner();
-    memStore[key] = value;
-    return {key, value, shared};
-  }
-}
-async function storageList(prefix, shared){
-  if(!storageAvailable){
-    return {keys: Object.keys(memStore).filter(k=>k.startsWith(prefix))};
-  }
-  try{
-    if(!window.storage) throw new Error('no storage');
-    return await window.storage.list(prefix, shared);
-  }catch(e){
-    storageAvailable = false;
-    showStorageBanner();
-    return {keys: Object.keys(memStore).filter(k=>k.startsWith(prefix))};
-  }
-}
-
-async function loadEntries(date){
-  try{
-    const res = await storageGet(await keyFor(date), true);
-    if(!res) return [];
-    return JSON.parse(res.value);
-  }catch(e){
-    return [];
-  }
-}
-async function saveEntries(date, entries){
-  try{
-    const res = await storageSet(await keyFor(date), JSON.stringify(entries), true);
-    return !!res;
-  }catch(e){
-    return false;
-  }
+function hideBanner(){
+  document.getElementById('storageBanner').style.display = 'none';
 }
 
 function fmtTs(ts){
   return new Date(ts).toLocaleString('es-MX',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit',year:'numeric'});
 }
 
-async function renderEntries(){
-  const date = dateInput.value;
+// ---- Guardado real en Firestore, en vivo por fecha ----
+let unsubscribe = null;
+function subscribeDate(date){
+  if(unsubscribe){ unsubscribe(); unsubscribe = null; }
   dateHint.textContent = fmtDateLabel(date);
   entriesList.innerHTML = '<div class="empty">Cargando...</div>';
-  const entries = await loadEntries(date);
-  entries.sort((a,b)=> (a.ts||0) - (b.ts||0));
+  const q = query(jaulasCol, where('fecha', '==', date));
+  unsubscribe = onSnapshot(q, (snap)=>{
+    hideBanner();
+    const entries = [];
+    snap.forEach(d=> entries.push({id: d.id, ...d.data()}));
+    entries.sort((a,b)=> (a.ts||0) - (b.ts||0));
+    renderList(entries, date);
+  }, (err)=>{
+    console.error(err);
+    showBanner('No se pudo conectar con la base de datos. Revisa tu conexión a internet e intenta de nuevo.');
+    entriesList.innerHTML = '<div class="empty">No se pudo cargar.</div>';
+  });
+}
+
+function renderList(entries, date){
   countLabel.textContent = entries.length ? entries.length + (entries.length===1?' jaula':' jaulas') : '';
   if(!entries.length){
     entriesList.innerHTML = '<div class="empty">Todavía no hay jaulas para esta fecha.</div>';
@@ -331,19 +300,22 @@ function renderTicketEdit(div, en, date){
       err.style.display = 'block';
       return;
     }
-    const list = await loadEntries(date);
-    const idx = list.findIndex(x=>x.id===en.id);
-    if(idx === -1){ renderEntries(); return; }
-    const history = list[idx].history || [{ts:list[idx].ts, accion:'creado'}];
-    history.push({ts:Date.now(), accion:'editado'});
-    list[idx] = {...list[idx], parada, codigo, tipo, nota, history};
-    const ok = await saveEntries(date, list);
-    if(!ok){
-      err.textContent = 'No se pudo guardar. Intenta de nuevo.';
+    const saveBtn = div.querySelector('[data-action="save"]');
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Guardando...';
+    try{
+      await updateDoc(doc(db, 'jaulas', en.id), {
+        parada, codigo, tipo, nota,
+        history: arrayUnion({ts: Date.now(), accion: 'editado'})
+      });
+      // La lista se vuelve a pintar sola por el guardado en vivo (onSnapshot).
+    }catch(e){
+      console.error(e);
+      err.textContent = 'No se pudo guardar. Revisa tu conexión e intenta de nuevo.';
       err.style.display = 'block';
-      return;
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Guardar cambios';
     }
-    renderEntries();
   });
 }
 
@@ -351,11 +323,11 @@ function escapeHtml(s){
   return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-dateInput.addEventListener('change', renderEntries);
+dateInput.addEventListener('change', ()=> subscribeDate(dateInput.value));
 
 document.getElementById('todayBtn').addEventListener('click', ()=>{
   dateInput.value = todayStr();
-  renderEntries();
+  subscribeDate(dateInput.value);
 });
 
 document.getElementById('addBtn').addEventListener('click', async ()=>{
@@ -370,20 +342,26 @@ document.getElementById('addBtn').addEventListener('click', async ()=>{
     return;
   }
   err.style.display = 'none';
-  const date = dateInput.value;
-  const list = await loadEntries(date);
-  list.push({id:uid(), parada, codigo, tipo, nota, ts:Date.now(), history:[{ts:Date.now(), accion:'creado'}]});
-  const ok = await saveEntries(date, list);
-  if(!ok){
-    err.textContent = 'No se pudo guardar. Intenta de nuevo.';
+  const addBtn = document.getElementById('addBtn');
+  addBtn.disabled = true;
+  addBtn.textContent = 'Guardando...';
+  try{
+    await addDoc(jaulasCol, {
+      fecha: dateInput.value, parada, codigo, tipo, nota,
+      ts: Date.now(), history: [{ts: Date.now(), accion: 'creado'}]
+    });
+    document.getElementById('fParada').value='';
+    document.getElementById('fCodigo').value='';
+    document.getElementById('fTipo').value='';
+    document.getElementById('fNota').value='';
+    // La lista se actualiza sola por el guardado en vivo (onSnapshot).
+  }catch(e){
+    console.error(e);
+    err.textContent = 'No se pudo guardar. Revisa tu conexión e intenta de nuevo.';
     err.style.display = 'block';
-    return;
   }
-  document.getElementById('fParada').value='';
-  document.getElementById('fCodigo').value='';
-  document.getElementById('fTipo').value='';
-  document.getElementById('fNota').value='';
-  renderEntries();
+  addBtn.disabled = false;
+  addBtn.textContent = 'Agregar jaula';
 });
 
 document.getElementById('searchBtn').addEventListener('click', async ()=>{
@@ -392,26 +370,19 @@ document.getElementById('searchBtn').addEventListener('click', async ()=>{
   if(!q){ resultsDiv.innerHTML = ''; return; }
   resultsDiv.innerHTML = '<div class="empty">Buscando...</div>';
   try{
-    const listing = await storageList('ruta:', true);
-    const keys = listing ? listing.keys : [];
+    const snap = await getDocs(jaulasCol);
     let found = [];
-    for(const k of keys){
-      try{
-        const res = await storageGet(k, true);
-        if(!res) continue;
-        const entries = JSON.parse(res.value);
-        entries.forEach(en=>{
-          if((en.codigo||'').toUpperCase().includes(q)){
-            found.push({date: k.replace('ruta:',''), entry: en});
-          }
-        });
-      }catch(e){}
-    }
+    snap.forEach(d=>{
+      const en = d.data();
+      if((en.codigo||'').toUpperCase().includes(q)){
+        found.push({date: en.fecha, entry: en});
+      }
+    });
     if(!found.length){
       resultsDiv.innerHTML = '<div class="empty">Sin resultados para "'+escapeHtml(q)+'".</div>';
       return;
     }
-    found.sort((a,b)=> b.date.localeCompare(a.date));
+    found.sort((a,b)=> (b.date||'').localeCompare(a.date||''));
     resultsDiv.innerHTML = '';
     let lastDate = null;
     found.forEach(({date, entry})=>{
@@ -434,11 +405,12 @@ document.getElementById('searchBtn').addEventListener('click', async ()=>{
       resultsDiv.appendChild(div);
     });
   }catch(e){
+    console.error(e);
     resultsDiv.innerHTML = '<div class="empty">No se pudo buscar. Intenta de nuevo.</div>';
   }
 });
 
-renderEntries();
+subscribeDate(dateInput.value);
 </script>
 </body>
 </html>
