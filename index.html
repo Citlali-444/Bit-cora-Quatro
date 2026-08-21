@@ -100,6 +100,8 @@
   .hist-badge.editado{background:rgba(207,144,96,.16);color:var(--gold-oncard);}
   .hist-actual{display:inline-block;font-family:var(--font-mono);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;padding:2px 7px;border-radius:3px;background:rgba(255,255,255,.08);color:var(--ink-on-card);}
   .hist-row{font-family:var(--font-mono);font-size:11px;color:var(--muted-on-card);margin-top:3px;}
+  .hist-changes{margin-top:6px;padding-top:6px;border-top:1px dashed var(--line-on-card);}
+  .hist-change{font-family:var(--font-body);font-size:11px;color:var(--ink-on-card);margin-top:2px;}
   .edit-form{display:grid;grid-template-columns:80px 130px 1fr 110px;gap:8px;margin-bottom:8px;}
   .edit-form .full{grid-column:1/-1;}
   .edit-actions{display:flex;gap:8px;}
@@ -414,6 +416,7 @@ function renderTicketView(div, en, date){
               '<div class="hist-row">📅 Fecha: '+fmtDateLabel(en.fecha)+'</div>'+
               '<div class="hist-row">👤 Registró: '+escapeHtml(h.usuario||'—')+'</div>'+
               '<div class="hist-row">🕐 Registro: '+fmtTs(h.ts)+'</div>'+
+              (h.cambios && h.cambios.length ? '<div class="hist-changes">'+h.cambios.map(c=>'<div class="hist-change">'+escapeHtml(c)+'</div>').join('')+'</div>' : '')+
             '</div>'+
           '</div>';
         }).join('');
@@ -525,10 +528,20 @@ function renderTicketEdit(div, en, date){
     const saveBtn = div.querySelector('[data-action="save"]');
     saveBtn.disabled = true;
     saveBtn.textContent = 'Guardando...';
+    const campos = [
+      ['Jaula', en.parada, parada],
+      ['Código', en.codigo, codigo],
+      ['Tipo', en.tipo, tipo],
+      ['Ruta', en.ruta, ruta],
+      ['Nota', en.nota, nota]
+    ];
+    const cambios = campos
+      .filter(([label, antes, ahora])=> (antes||'') !== (ahora||''))
+      .map(([label, antes, ahora])=> label+': "'+(antes||'—')+'" → "'+(ahora||'—')+'"');
     try{
       await updateDoc(doc(db, 'jaulas', en.id), {
         parada, codigo, tipo, ruta, nota,
-        history: arrayUnion({ts: Date.now(), accion: 'editado', usuario: currentUser.name, email: currentUser.email})
+        history: arrayUnion({ts: Date.now(), accion: 'editado', usuario: currentUser.name, email: currentUser.email, cambios})
       });
       // La lista se vuelve a pintar sola por el guardado en vivo (onSnapshot).
     }catch(e){
