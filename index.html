@@ -147,7 +147,7 @@
           <option value="Reprogramado">
         </datalist>
       </div>
-      <div class="wide"><label class="f">Ruta</label><input type="text" id="fRuta" placeholder="Ruta 3"></div>
+      <div class="wide"><label class="f">Ruta</label><input type="text" id="fRuta" placeholder="21/08/2026"></div>
       <div class="full"><label class="f">Nota</label><textarea id="fNota" placeholder="Detalle adicional (opcional)" style="min-height:44px;"></textarea></div>
     </div>
     <p class="err" id="formErr" style="display:none;"></p>
@@ -440,7 +440,7 @@ function renderTicketEdit(div, en, date){
         '<div><label class="f">Jaula</label><input type="text" class="e-parada" placeholder="1" value="'+escapeHtml(en.parada||'')+'"></div>'+
         '<div><label class="f">Código</label><input type="text" class="e-codigo" placeholder="OZA1326" value="'+escapeHtml(en.codigo||'')+'" style="font-family:var(--font-mono);text-transform:uppercase;"></div>'+
         '<div class="wide"><label class="f">Tipo</label><input type="text" class="e-tipo" placeholder="Mercancía de piso Puebla" value="'+escapeHtml(en.tipo||'')+'" list="tiposList"></div>'+
-        '<div class="wide"><label class="f">Ruta</label><input type="text" class="e-ruta" placeholder="Ruta 3" value="'+escapeHtml(en.ruta||'')+'"></div>'+
+        '<div class="wide"><label class="f">Ruta</label><input type="text" class="e-ruta" placeholder="21/08/2026" value="'+escapeHtml(en.ruta||'')+'"></div>'+
         '<div class="full"><label class="f">Nota</label><textarea class="e-nota" style="min-height:44px;">'+escapeHtml(en.nota||'')+'</textarea></div>'+
       '</div>'+
       '<p class="err" style="display:none;"></p>'+
