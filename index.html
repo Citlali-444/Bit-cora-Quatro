@@ -333,7 +333,7 @@ function renderTicketView(div, en, date){
     '<div class="ticket-body">'+
       '<span class="stamp">'+escapeHtml(en.codigo||'sin código')+'</span>'+tipoBadge+
       (en.nota ? '<p class="nota">'+escapeHtml(en.nota)+'</p>' : '')+
-      '<div class="meta">agregado '+ fmtTs(en.ts) +(lastEdit ? ' · editado '+fmtTs(lastEdit.ts) : '')+'</div>'+
+      '<div class="meta">agregado por '+escapeHtml(en.usuario||'—')+' · '+fmtTs(en.ts)+(lastEdit ? ' · editado por '+escapeHtml(lastEdit.usuario||'—')+' · '+fmtTs(lastEdit.ts) : '')+'</div>'+
       (history.length ? '<button class="hist-toggle" data-action="hist">ver historial ('+history.length+')</button><div class="hist-list" style="display:none;"></div>' : '')+
       '<div class="comments" data-comments></div>'+
     '</div>'+
@@ -354,7 +354,7 @@ function renderTicketView(div, en, date){
       if(listDiv.style.display === 'none'){
         listDiv.innerHTML = history.slice().reverse().map(h=>{
           const label = h.accion === 'creado' ? 'creado' : 'editado';
-          return '<span>'+label+' · '+fmtTs(h.ts)+'</span>';
+          return '<span>'+label+' por '+escapeHtml(h.usuario||'—')+' · '+fmtTs(h.ts)+'</span>';
         }).join('');
         listDiv.style.display = 'flex';
         histBtn.textContent = 'ocultar historial';
@@ -465,7 +465,7 @@ function renderTicketEdit(div, en, date){
     try{
       await updateDoc(doc(db, 'jaulas', en.id), {
         parada, codigo, tipo, nota,
-        history: arrayUnion({ts: Date.now(), accion: 'editado'})
+        history: arrayUnion({ts: Date.now(), accion: 'editado', usuario: currentUser.name, email: currentUser.email})
       });
       // La lista se vuelve a pintar sola por el guardado en vivo (onSnapshot).
     }catch(e){
@@ -508,7 +508,8 @@ document.getElementById('addBtn').addEventListener('click', async ()=>{
   try{
     await addDoc(jaulasCol, {
       fecha: dateInput.value, parada, codigo, tipo, nota,
-      ts: Date.now(), history: [{ts: Date.now(), accion: 'creado'}]
+      ts: Date.now(), usuario: currentUser.name, usuarioEmail: currentUser.email,
+      history: [{ts: Date.now(), accion: 'creado', usuario: currentUser.name, email: currentUser.email}]
     });
     document.getElementById('fParada').value='';
     document.getElementById('fCodigo').value='';
@@ -561,6 +562,7 @@ document.getElementById('searchBtn').addEventListener('click', async ()=>{
           '<span class="stamp">'+escapeHtml(entry.codigo||'sin código')+'</span>'+
           (entry.tipo ? '<span class="tipo-badge">'+escapeHtml(entry.tipo)+'</span>' : '')+
           (entry.nota ? '<p class="nota">'+escapeHtml(entry.nota)+'</p>' : '')+
+          '<div class="meta">agregado por '+escapeHtml(entry.usuario||'—')+(entry.ts ? ' · '+fmtTs(entry.ts) : '')+'</div>'+
         '</div>';
       resultsDiv.appendChild(div);
     });
