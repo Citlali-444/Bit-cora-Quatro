@@ -59,7 +59,7 @@
   .comment-text{margin:2px 0 0;}
   .comment-form{display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap;}
   .comment-form textarea{flex:1;min-width:140px;font-family:var(--font-body);font-size:13px;padding:6px 8px;border:1px solid var(--line-on-card);border-radius:4px;}
-  .grid-form{display:grid;grid-template-columns:90px 140px 1fr;gap:10px;margin-bottom:10px;}
+  .grid-form{display:grid;grid-template-columns:90px 140px 1fr 130px;gap:10px;margin-bottom:10px;}
   .grid-form .full{grid-column:1/-1;}
   label.f{display:block;font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted-on-card);margin-bottom:4px;}
   input[type=text],select,textarea{width:100%;font-family:var(--font-body);font-size:14px;padding:8px 9px;border:1px solid var(--line-on-card);border-radius:4px;background:var(--card-2);color:var(--ink-on-card);}
@@ -78,6 +78,7 @@
   .ticket-body{flex:1;min-width:0;}
   .stamp{display:inline-block;font-family:var(--font-mono);font-weight:600;font-size:14px;letter-spacing:.04em;color:var(--gold-oncard);border:1.5px solid var(--gold-oncard);border-radius:4px;padding:2px 8px;transform:rotate(-1.2deg);margin-bottom:6px;}
   .tipo-badge{display:inline-block;font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:.05em;background:var(--teal-bg);color:var(--teal);padding:2px 8px;border-radius:3px;margin-left:8px;vertical-align:2px;}
+  .ruta-badge{display:inline-block;font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:.05em;background:rgba(207,144,96,.16);color:var(--gold-oncard);padding:2px 8px;border-radius:3px;margin-left:8px;vertical-align:2px;}
   .nota{font-size:14px;line-height:1.5;margin:2px 0 0;}
   .meta{font-family:var(--font-mono);font-size:11px;color:var(--muted-on-card);margin-top:6px;}
   .actions{display:flex;flex-direction:column;gap:2px;padding-top:2px;}
@@ -85,7 +86,7 @@
   .iconbtn:hover{color:var(--teal-oncard);}
   .hist-toggle{background:none;border:none;color:var(--teal-oncard);cursor:pointer;font-family:var(--font-mono);font-size:11px;text-decoration:underline;padding:0;margin-top:4px;}
   .hist-list{margin:6px 0 0;padding:8px 10px;background:var(--card-2);border-radius:5px;font-family:var(--font-mono);font-size:11px;color:var(--muted-on-card);display:flex;flex-direction:column;gap:3px;}
-  .edit-form{display:grid;grid-template-columns:80px 130px 1fr;gap:8px;margin-bottom:8px;}
+  .edit-form{display:grid;grid-template-columns:80px 130px 1fr 110px;gap:8px;margin-bottom:8px;}
   .edit-form .full{grid-column:1/-1;}
   .edit-actions{display:flex;gap:8px;}
   .panel .btn.secondary,.ticket .btn.secondary{color:var(--ink-on-card);border-color:var(--line-on-card);text-shadow:none;}
@@ -100,6 +101,7 @@
     .grid-form .wide{grid-column:1/-1;}
     .edit-form{grid-template-columns:1fr 1fr;}
     .edit-form .full{grid-column:1/-1;}
+    .edit-form .wide{grid-column:1/-1;}
   }
 </style>
 </head>
@@ -142,8 +144,10 @@
           <option value="Mercancía de piso Zaragoza">
           <option value="Planta entrega directo">
           <option value="Cliente recolecta en tienda">
+          <option value="Reprogramado">
         </datalist>
       </div>
+      <div class="wide"><label class="f">Ruta</label><input type="text" id="fRuta" placeholder="Ruta 3"></div>
       <div class="full"><label class="f">Nota</label><textarea id="fNota" placeholder="Detalle adicional (opcional)" style="min-height:44px;"></textarea></div>
     </div>
     <p class="err" id="formErr" style="display:none;"></p>
@@ -326,12 +330,13 @@ function renderList(entries, date){
 
 function renderTicketView(div, en, date){
   const tipoBadge = en.tipo ? '<span class="tipo-badge">'+escapeHtml(en.tipo)+'</span>' : '';
+  const rutaBadge = en.ruta ? '<span class="ruta-badge">Ruta '+escapeHtml(en.ruta)+'</span>' : '';
   const history = en.history || [];
   const lastEdit = history.length > 1 ? history[history.length-1] : null;
   div.innerHTML =
     '<div class="parada">'+escapeHtml(en.parada||'—')+'</div>'+
     '<div class="ticket-body">'+
-      '<span class="stamp">'+escapeHtml(en.codigo||'sin código')+'</span>'+tipoBadge+
+      '<span class="stamp">'+escapeHtml(en.codigo||'sin código')+'</span>'+tipoBadge+rutaBadge+
       (en.nota ? '<p class="nota">'+escapeHtml(en.nota)+'</p>' : '')+
       '<div class="meta">agregado por '+escapeHtml(en.usuario||'—')+' · '+fmtTs(en.ts)+(lastEdit ? ' · editado por '+escapeHtml(lastEdit.usuario||'—')+' · '+fmtTs(lastEdit.ts) : '')+'</div>'+
       (history.length ? '<button class="hist-toggle" data-action="hist">ver historial ('+history.length+')</button><div class="hist-list" style="display:none;"></div>' : '')+
@@ -434,7 +439,8 @@ function renderTicketEdit(div, en, date){
       '<div class="edit-form">'+
         '<div><label class="f">Jaula</label><input type="text" class="e-parada" placeholder="1" value="'+escapeHtml(en.parada||'')+'"></div>'+
         '<div><label class="f">Código</label><input type="text" class="e-codigo" placeholder="OZA1326" value="'+escapeHtml(en.codigo||'')+'" style="font-family:var(--font-mono);text-transform:uppercase;"></div>'+
-        '<div class="full"><label class="f">Tipo</label><input type="text" class="e-tipo" placeholder="Mercancía de piso Puebla" value="'+escapeHtml(en.tipo||'')+'" list="tiposList"></div>'+
+        '<div class="wide"><label class="f">Tipo</label><input type="text" class="e-tipo" placeholder="Mercancía de piso Puebla" value="'+escapeHtml(en.tipo||'')+'" list="tiposList"></div>'+
+        '<div class="wide"><label class="f">Ruta</label><input type="text" class="e-ruta" placeholder="Ruta 3" value="'+escapeHtml(en.ruta||'')+'"></div>'+
         '<div class="full"><label class="f">Nota</label><textarea class="e-nota" style="min-height:44px;">'+escapeHtml(en.nota||'')+'</textarea></div>'+
       '</div>'+
       '<p class="err" style="display:none;"></p>'+
@@ -452,6 +458,7 @@ function renderTicketEdit(div, en, date){
     const parada = div.querySelector('.e-parada').value.trim();
     const codigo = div.querySelector('.e-codigo').value.trim().toUpperCase();
     const tipo = div.querySelector('.e-tipo').value.trim();
+    const ruta = div.querySelector('.e-ruta').value.trim();
     const nota = div.querySelector('.e-nota').value.trim();
     const err = div.querySelector('.err');
     if(!codigo && !nota){
@@ -464,7 +471,7 @@ function renderTicketEdit(div, en, date){
     saveBtn.textContent = 'Guardando...';
     try{
       await updateDoc(doc(db, 'jaulas', en.id), {
-        parada, codigo, tipo, nota,
+        parada, codigo, tipo, ruta, nota,
         history: arrayUnion({ts: Date.now(), accion: 'editado', usuario: currentUser.name, email: currentUser.email})
       });
       // La lista se vuelve a pintar sola por el guardado en vivo (onSnapshot).
@@ -494,6 +501,7 @@ document.getElementById('addBtn').addEventListener('click', async ()=>{
   const parada = document.getElementById('fParada').value.trim();
   const codigo = document.getElementById('fCodigo').value.trim().toUpperCase();
   const tipo = document.getElementById('fTipo').value.trim();
+  const ruta = document.getElementById('fRuta').value.trim();
   const nota = document.getElementById('fNota').value.trim();
   const err = document.getElementById('formErr');
   if(!codigo && !nota){
@@ -507,13 +515,14 @@ document.getElementById('addBtn').addEventListener('click', async ()=>{
   addBtn.textContent = 'Guardando...';
   try{
     await addDoc(jaulasCol, {
-      fecha: dateInput.value, parada, codigo, tipo, nota,
+      fecha: dateInput.value, parada, codigo, tipo, ruta, nota,
       ts: Date.now(), usuario: currentUser.name, usuarioEmail: currentUser.email,
       history: [{ts: Date.now(), accion: 'creado', usuario: currentUser.name, email: currentUser.email}]
     });
     document.getElementById('fParada').value='';
     document.getElementById('fCodigo').value='';
     document.getElementById('fTipo').value='';
+    document.getElementById('fRuta').value='';
     document.getElementById('fNota').value='';
     // La lista se actualiza sola por el guardado en vivo (onSnapshot).
   }catch(e){
@@ -561,6 +570,7 @@ document.getElementById('searchBtn').addEventListener('click', async ()=>{
         '<div class="ticket-body">'+
           '<span class="stamp">'+escapeHtml(entry.codigo||'sin código')+'</span>'+
           (entry.tipo ? '<span class="tipo-badge">'+escapeHtml(entry.tipo)+'</span>' : '')+
+          (entry.ruta ? '<span class="ruta-badge">Ruta '+escapeHtml(entry.ruta)+'</span>' : '')+
           (entry.nota ? '<p class="nota">'+escapeHtml(entry.nota)+'</p>' : '')+
           '<div class="meta">agregado por '+escapeHtml(entry.usuario||'—')+(entry.ts ? ' · '+fmtTs(entry.ts) : '')+'</div>'+
         '</div>';
